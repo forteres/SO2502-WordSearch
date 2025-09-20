@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <queue>
 #include <functional>
+#include <sstream>
 
 using namespace std; 
 
@@ -15,6 +16,10 @@ struct output {
     pair<int,int> initialPos;
     pair<string, string> direction;   
 };
+
+    vector<output> results;
+    vector<vector<char>> matriz;
+    vector<string> words;
 
 class ThreadPool {
     public:
@@ -164,15 +169,13 @@ void searchDirection(Trie& trie, int dx, int dy, vector<output>& results, mutex&
     }
 }
 
-    vector<output> results;
-    vector<vector<char>> matriz;
-    vector<string> words;
+ 
 
 int main () {
 
 //#READ FILE
     
-    string filePath = "cacapalavras.txt";
+    string filePath = "../cacapalavras.txt";
 
     ifstream file (filePath);
 
@@ -188,10 +191,10 @@ int main () {
         istringstream iss(readLine);
         iss >> matrizLine >> matrizColumn;
     }
-    else(
+    else {
         cout << "Arquivo inválido" << endl;
         return 1;
-    )
+    }
         
     matriz.resize(matrizLine, vector<char>(matrizColumn));
 
@@ -243,10 +246,8 @@ int main () {
     for(auto& o : foundWords) {
         cout << "Palavra: " << o.word 
              << " Inicio: (" << o.initialPos.first << "," << o.initialPos.second << ")"
-             << " Direcao: (" << o.direction[0] << "," << o.direction[1] << ")\n";
+             << " Direcao: (" << o.direction.first << "," << o.direction.second << ")\n";
     }
-
-
 
     return 0;
 }
