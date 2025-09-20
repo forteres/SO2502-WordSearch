@@ -3,7 +3,6 @@
 #include <fstream> 
 #include <string> 
 #include <vector>
-#include <sstream>
 
 using namespace std; 
 
@@ -22,7 +21,8 @@ int main () {
     ifstream file (filePath);
 
     if (!file.is_open()) {
-        cout << "Erro." << endl;
+        cout << "Erro ao abrir o arquivo." << endl;
+        return 1;
     }
 
     string readLine;
@@ -32,6 +32,10 @@ int main () {
         istringstream iss(readLine);
         iss >> matrizLine >> matrizColumn;
     }
+    else(
+        cout << "Arquivo inválido" << endl;
+        return 1;
+    )
         
     matriz.resize(matrizLine, vector<char>(matrizColumn));
 
@@ -52,10 +56,10 @@ int main () {
 
     file.close();
 
-// relava, teste ok
-    cout << "Primeira linha (20 primeiros elementos): ";
-    for (int j = 0; j < min(20, matrizColumn); j++) {
-        cout << matriz[0][j] << " ";
+// releva, teste ok
+    cout << "Lendo arquivo): \n";
+    for (long long unsigned int i = 0; i < words.size(); i++) {
+        cout << words[i] << endl;
     }
     cout << endl;
 
