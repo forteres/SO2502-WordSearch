@@ -30,52 +30,51 @@ class ThreadPool {
         condition_variable mutex_condition;
         vector<thread> threads;
         queue<function<void()>> jobs;
-
-    void ThreadPool::Start() {
-        const uint32_t num_threads = thread::hardware_concurrency();
-        for (uint32_t ii = 0; ii < num_threads; ++ii) {
-            threads.emplace_back(thread(&ThreadPool::ThreadLoop,this));
-        }
-    }
-
-    void ThreadPool::ThreadLoop() {
-        while (true) {
-            function<void()> job;
-            {
-                unique_lock<mutex> lock(queue_mutex);
-                mutex_condition.wait(lock, [this] {
-                    return !jobs.empty() || should_terminate;
-                });
-                if (should_terminate) {
-                    return;
-                }
-                job = jobs.front();
-                jobs.pop();
-            }
-            job();
-        }
-    }
-
-    void ThreadPool::QueueJob(const function<void()>& job) { //thread_pool->QueueJob([] { /* ... */ });
-        {
-            unique_lock<mutex> lock(queue_mutex);
-            jobs.push(job);
-        }
-        mutex_condition.notify_one();
-    }
-
-    void ThreadPool::Stop() {
-        {
-            unique_lock<mutex> lock(queue_mutex);
-            should_terminate = true;
-        }
-        mutex_condition.notify_all();
-        for (thread& active_thread : threads) {
-            active_thread.join();
-        }
-        threads.clear();
-    }
 };
+void ThreadPool::Start() {
+    const uint32_t num_threads = thread::hardware_concurrency();
+    for (uint32_t ii = 0; ii < num_threads; ++ii) {
+        threads.emplace_back(thread(&ThreadPool::ThreadLoop,this));
+    }
+}
+
+void ThreadPool::ThreadLoop() {
+    while (true) {
+        function<void()> job;
+        {
+            unique_lock<mutex> lock(queue_mutex);
+            mutex_condition.wait(lock, [this] {
+                return !jobs.empty() || should_terminate;
+            });
+            if (should_terminate) {
+                return;
+            }
+            job = jobs.front();
+            jobs.pop();
+        }
+        job();
+    }
+}
+
+void ThreadPool::QueueJob(const function<void()>& job) { //thread_pool->QueueJob([] { /* ... */ });
+    {
+        unique_lock<mutex> lock(queue_mutex);
+        jobs.push(job);
+    }
+    mutex_condition.notify_one();
+}
+
+void ThreadPool::Stop() {
+    {
+        unique_lock<mutex> lock(queue_mutex);
+        should_terminate = true;
+    }
+    mutex_condition.notify_all();
+    for (thread& active_thread : threads) {
+        active_thread.join();
+    }
+    threads.clear();
+}
 
 struct TrieNode {
     bool isWord = false;  // marca se o caminho forma uma palavra completa
@@ -244,6 +243,6 @@ int main () {
     }
 
 
-    
+
     return 0;
 }
