@@ -108,6 +108,10 @@ public:
 
     TrieNode* getRoot() { return root; }
 
+    bool hasStartingChar(char c) {
+        return root->children.find(c) != root->children.end();
+    }
+
 private:
     TrieNode* root;
 };
