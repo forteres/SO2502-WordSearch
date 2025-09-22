@@ -1,59 +1,56 @@
 #include <iostream>
 #include <thread>
-#include <fstream> 
-#include <string> 
+#include <fstream>
+#include <string>
 #include <vector>
 #include <mutex>
 #include <condition_variable>
 #include <queue>
 #include <functional>
 #include <sstream>
+#include <unordered_map>
+#include <algorithm>
+#include <cctype>
 
-using namespace std; 
+using namespace std;
 
 struct output {
     string word;
-    pair<int,int> initialPos;
-    pair<string, string> direction;   
+    pair<int,int> initialPos;  // linha/coluna
+    string direction;
+    vector<pair<int,int>> positions;
 };
 
-    vector<output> results;
-    vector<vector<char>> matriz;
-    vector<string> words;
+vector<vector<char>> matriz;
+vector<string> words;
 
 class ThreadPool {
-    public:
-        void Start();
-        void QueueJob(const function<void()>& job);
-        void Stop();
-
-    private:
-        void ThreadLoop();
-
-        bool should_terminate = false;
-        mutex queue_mutex;
-        condition_variable mutex_condition;
-        vector<thread> threads;
-        queue<function<void()>> jobs;
+public:
+    void Start();
+    void QueueJob(const function<void()>& job);
+    void Stop();
+private:
+    void ThreadLoop();
+    bool should_terminate = false;
+    mutex queue_mutex;
+    condition_variable mutex_condition;
+    vector<thread> threads;
+    queue<function<void()>> jobs;
 };
+
 void ThreadPool::Start() {
     const uint32_t num_threads = thread::hardware_concurrency();
-    for (uint32_t ii = 0; ii < num_threads; ++ii) {
-        threads.emplace_back(thread(&ThreadPool::ThreadLoop,this));
-    }
+    for(uint32_t i=0; i<num_threads; ++i)
+        threads.emplace_back(&ThreadPool::ThreadLoop, this);
 }
 
 void ThreadPool::ThreadLoop() {
-    while (true) {
+    while(true) {
         function<void()> job;
         {
             unique_lock<mutex> lock(queue_mutex);
-            mutex_condition.wait(lock, [this] {
-                return !jobs.empty() || should_terminate;
-            });
-            if (should_terminate) {
-                return;
-            }
+            mutex_condition.wait(lock, [this]{ return !jobs.empty() || should_terminate; });
+            if(should_terminate && jobs.empty()) return;
             job = jobs.front();
             jobs.pop();
         }
@@ -61,7 +58,7 @@ void ThreadPool::ThreadLoop() {
     }
 }
 
-void ThreadPool::QueueJob(const function<void()>& job) { //thread_pool->QueueJob([] { /* ... */ });
+void ThreadPool::QueueJob(const function<void()>& job) {
     {
         unique_lock<mutex> lock(queue_mutex);
         jobs.push(job);
@@ -75,93 +72,69 @@ void ThreadPool::Stop() {
         should_terminate = true;
     }
     mutex_condition.notify_all();
-    for (thread& active_thread : threads) {
-        active_thread.join();
-    }
+    for(thread &t : threads) t.join();
     threads.clear();
 }
 
 struct TrieNode {
-    bool isWord = false;  // marca se o caminho forma uma palavra completa
+    bool isWord = false;
     unordered_map<char, TrieNode*> children;
 };
 
 class Trie {
 public:
     Trie() { root = new TrieNode(); }
-    
     void insert(const string& word) {
         TrieNode* node = root;
         for(char c : word) {
-            if(node->children.find(c) == node->children.end()) {
+            c = tolower(c);
+            if(node->children.find(c) == node->children.end())
                 node->children[c] = new TrieNode();
-            }
             node = node->children[c];
         }
         node->isWord = true;
     }
-
-    bool search(const string& word) {
-        TrieNode* node = root;
-        for(char c : word) {
-            if(node->children.find(c) == node->children.end())
-                return false;
-            node = node->children[c];
-        }
-        return node->isWord;
-    }
-
     TrieNode* getRoot() { return root; }
-
-    bool hasStartingChar(char c) {
-        return root->children.find(c) != root->children.end();
-    }
-
 private:
     TrieNode* root;
 };
 
-void readWord(int8_t right,int8_t up, int posX, int posY){
-    string result;
-    int x = posX;
-    int y = posY;
-    
-    while(x >= 0 && x < matriz[0].size() && y >= 0 && y < matriz.size()) {
-        result += matriz[y][x];
-        x += right;
-        y -= up; // y diminui para cima, aumenta para baixo
-    }
-
-    output resultNode;
-    resultNode.word = result;
-    resultNode.initialPos.first = posX;
-    resultNode.initialPos.second = posY;
-    resultNode.direction.first = "random";
-    resultNode.direction.second = "random2";
-
-    results.push_back(resultNode);
+string getDirectionName(int dx, int dy) {
+    if(dx==1 && dy==0) return "direita";
+    if(dx==-1 && dy==0) return "esquerda";
+    if(dx==0 && dy==1) return "baixo";
+    if(dx==0 && dy==-1) return "cima";
+    if(dx==1 && dy==1) return "direita/baixo";
+    if(dx==1 && dy==-1) return "direita/cima";
+    if(dx==-1 && dy==1) return "esquerda/baixo";
+    if(dx==-1 && dy==-1) return "esquerda/cima";
+    return "desconhecida";
 }
 
 void searchDirection(Trie& trie, int dx, int dy, vector<output>& results, mutex& results_mutex) {
-    for(int y = 0; y < matriz.size(); y++) {
-        for(int x = 0; x < matriz[0].size(); x++) {
-            char firstChar = matriz[y][x];
-            if(!trie.hasStartingChar(firstChar))
-                continue;  // ignora se não existe palavra começando com essa letra
+    int rows = (int)matriz.size();
+    int cols = (int)matriz[0].size();
 
-            string word = "";
-            int nx = x, ny = y;
+    for(int y=0; y<rows; ++y) {
+        for(int x=0; x<cols; ++x) {
             TrieNode* node = trie.getRoot();
-            while(nx >= 0 && nx < matriz[0].size() && ny >= 0 && ny < matriz.size()) {
-                char c = matriz[ny][nx];
-                if(node->children.find(c) == node->children.end())
-                    break;
-                word += c;
+            int nx = x, ny = y;
+            string currentWord = "";
+            vector<pair<int,int>> positions;
+
+            while(nx >=0 && nx < cols && ny >=0 && ny < rows) {
+                char c = tolower(matriz[ny][nx]);
+                if(node->children.find(c) == node->children.end()) break;
+
+                currentWord += c;
                 node = node->children[c];
+                positions.push_back({ny, nx});  // linha/coluna
+
                 if(node->isWord) {
                     lock_guard<mutex> lock(results_mutex);
-                    results.push_back({word, {x,y}, {"dx="+to_string(dx),"dy="+to_string(dy)}});
+                    results.push_back(output{currentWord, {y, x}, getDirectionName(dx,dy), positions});
                 }
+
                 nx += dx;
                 ny += dy;
             }
@@ -169,57 +142,30 @@ void searchDirection(Trie& trie, int dx, int dy, vector<output>& results, mutex&
     }
 }
 
- 
-
-int main () {
-
-//#READ FILE
-    
+int main() {
     string filePath = "../cacapalavras.txt";
+    ifstream file(filePath);
+    if(!file.is_open()) { cout << "Erro ao abrir o arquivo." << endl; return 1; }
 
-    ifstream file (filePath);
-
-    if (!file.is_open()) {
-        cout << "Erro ao abrir o arquivo." << endl;
-        return 1;
-    }
-
-    string readLine;
     int matrizLine, matrizColumn;
-
-    if(getline(file,readLine)){
+    string readLine;
+    if(getline(file, readLine)) {
         istringstream iss(readLine);
         iss >> matrizLine >> matrizColumn;
-    }
-    else {
-        cout << "Arquivo inválido" << endl;
-        return 1;
-    }
-        
+    } else { cout << "Arquivo inválido" << endl; return 1; }
+
     matriz.resize(matrizLine, vector<char>(matrizColumn));
-
-    for (int i = 0; i < matrizLine; i++) {
-        
+    for(int i=0;i<matrizLine;++i) {
         getline(file, readLine);
-
-        for (int j = 0; j < matrizColumn; j++) {
+        for(int j=0;j<matrizColumn;++j)
             matriz[i][j] = readLine[j];
-        }
     }
 
-    while(getline(file, readLine)){
-        if(!readLine.empty()){
-            words.push_back(readLine);
-        }
-    }
-
+    while(getline(file, readLine)) if(!readLine.empty()) words.push_back(readLine);
     file.close();
 
-//#START PROGRAM
-
     Trie trie;
-    for(const auto& w : words)
-        trie.insert(w);
+    for(auto &w : words) trie.insert(w);
 
     vector<output> foundWords;
     mutex results_mutex;
@@ -227,27 +173,49 @@ int main () {
     ThreadPool thread_pool;
     thread_pool.Start();
 
-    // 8 direções
     vector<pair<int,int>> directions = {
-        {1,0}, {-1,0}, {0,1}, {0,-1},    // direita, esquerda, baixo, cima
-        {1,1}, {1,-1}, {-1,1}, {-1,-1}   // diagonais
+        {1,0},{-1,0},{0,1},{0,-1},
+        {1,1},{1,-1},{-1,1},{-1,-1}
     };
 
-    for(auto [dx, dy] : directions) {
-        // captura referências corretamente
-        thread_pool.QueueJob([&trie, dx, dy, &foundWords, &results_mutex]() {
+    for(auto [dx,dy] : directions)
+        thread_pool.QueueJob([&trie,dx,dy,&foundWords,&results_mutex]{
             searchDirection(trie, dx, dy, foundWords, results_mutex);
         });
+
+    thread_pool.Stop();
+
+    // Atualiza matriz com letras maiúsculas
+    for(auto &o : foundWords)
+        for(auto [row,col] : o.positions)
+            matriz[row][col] = toupper(matriz[row][col]);
+
+    ofstream outFile("../saida.txt");
+    if(!outFile.is_open()) { cout << "Erro ao criar saída" << endl; return 1; }
+
+    for(auto &linha : matriz) {
+        for(char c : linha) outFile << c;
+        outFile << "\n";
+    }
+    outFile << "\n";
+
+    for(auto &w : words) {
+        vector<output> occurrences;
+        for(auto &o : foundWords)
+            if(o.word.size() == w.size() &&
+               equal(w.begin(), w.end(), o.word.begin(),
+                     [](char a,char b){ return tolower(a)==tolower(b); }))
+                occurrences.push_back(o);
+
+        if(occurrences.empty())
+            outFile << w << ": não encontrada\n";
+        else
+            for(auto &o : occurrences)
+                outFile << o.word
+                        << " (" << o.initialPos.first + 1 << "," << o.initialPos.second + 1 << "):"
+                        << o.direction << "\n";
     }
 
-    thread_pool.Stop();  // espera todas as threads terminarem
-
-    // Imprime resultados
-    for(auto& o : foundWords) {
-        cout << "Palavra: " << o.word 
-             << " Inicio: (" << o.initialPos.first << "," << o.initialPos.second << ")"
-             << " Direcao: (" << o.direction.first << "," << o.direction.second << ")\n";
-    }
-
+    outFile.close();
     return 0;
 }
