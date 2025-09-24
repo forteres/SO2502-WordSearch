@@ -24,6 +24,7 @@ struct output {
 vector<vector<char>> matriz;
 vector<string> words;
 
+// Declaracao da ThreadPool para paralelismo
 class ThreadPool {
 public:
     void Start();
@@ -76,6 +77,7 @@ void ThreadPool::Stop() {
     threads.clear();
 }
 
+//Declaracao do Trie para pesquisa otimizada na matriz
 struct TrieNode {
     bool isWord = false;
     unordered_map<char, TrieNode*> children;
@@ -143,6 +145,7 @@ void searchDirection(Trie& trie, int dx, int dy, vector<output>& results, mutex&
 }
 
 int main() {
+    // Acesso e leitura do arquivo
     string filePath = "../cacapalavras.txt";
     ifstream file(filePath);
     if(!file.is_open()) { cout << "Erro ao abrir o arquivo." << endl; return 1; }
@@ -164,6 +167,7 @@ int main() {
     while(getline(file, readLine)) if(!readLine.empty()) words.push_back(readLine);
     file.close();
 
+    // Processamento da Trie invocando o processamento paralelo em todas as direcoes uma vez que a primeira letra eh valida
     Trie trie;
     for(auto &w : words) trie.insert(w);
 
@@ -185,7 +189,7 @@ int main() {
 
     thread_pool.Stop();
 
-    // Atualiza matriz com letras maiúsculas
+    // Atualiza matriz output com letras maiusculas
     for(auto &o : foundWords)
         for(auto [row,col] : o.positions)
             matriz[row][col] = toupper(matriz[row][col]);
@@ -193,12 +197,13 @@ int main() {
     ofstream outFile("../saida.txt");
     if(!outFile.is_open()) { cout << "Erro ao criar saída" << endl; return 1; }
 
-    for(auto &linha : matriz) {
-        for(char c : linha) outFile << c;
+    for(auto &line : matriz) {
+        for(char c : line) outFile << c;
         outFile << "\n";
     }
     outFile << "\n";
 
+    // Cria a relacao de quais palavras foram encontradas e suas respectivas posicoes
     for(auto &w : words) {
         vector<output> occurrences;
         for(auto &o : foundWords)
@@ -215,7 +220,6 @@ int main() {
                         << " (" << o.initialPos.first + 1 << "," << o.initialPos.second + 1 << "):"
                         << o.direction << "\n";
     }
-
     outFile.close();
     return 0;
 }
